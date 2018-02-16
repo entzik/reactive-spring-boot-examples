@@ -1,4 +1,4 @@
-package com.example.demo.annotationbased;
+package com.thekirschners.springbootsamples.reactiveupload;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,19 +22,34 @@ import java.nio.file.StandardOpenOption;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
+/**
+ * example to demonstrate fully reactive file upload using using SpringBoot2 WebFlux and NIO {@link AsynchronousFileChannel}
+ */
 @RestController
 @RequestMapping(path = "/api/reactive-upload")
 public class ReactiveUploadResource {
     Logger LOGGER = LoggerFactory.getLogger(ReactiveUploadResource.class);
 
+    /**
+     * upload handler method, mapped to POST. Like any file upload handler it consumes MULTIPART_FORM_DATA.
+     * Produces a JSON respomse
+     *
+     * @param parts a flux providing all part contained in the MULTIPART_FORM_DATA request
+     * @return a flux of results - one element per uploaded file
+     */
     @RequestMapping(method = RequestMethod.POST, consumes = MediaType.MULTIPART_FORM_DATA_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     public Flux<String> uploadHandler(@RequestBody Flux<Part> parts) {
         return parts
-                .filter(part -> part instanceof FilePart)
-                .ofType(FilePart.class)
-                .flatMap(this::saveFile);
+                .filter(part -> part instanceof FilePart) // only retain file parts
+                .ofType(FilePart.class) // convert the flux to FilePart
+                .flatMap(this::saveFile); // save each file and flatmap it to a flux of results
     }
 
+    /**
+     * tske a {@link FilePart}, transfer it to disk using {@link AsynchronousFileChannel}s and return a {@link Mono} representing the result
+     * @param filePart - the request part containing the file to be saved
+     * @return a {@link Mono} representing the result of the operation
+     */
     private Mono<String> saveFile(FilePart filePart) {
         LOGGER.info("handling file upload {}", filePart.filename());
 
@@ -98,65 +113,9 @@ public class ReactiveUploadResource {
                 }
 
             }).last().map(dataBuffer -> filePart.filename() + " " + (errorFlag.get() ? "error" : "uploaded"));
-/*
-            filePart.content()
-                    .subscribe(dataBuffer -> { // onNext
-                        int count = dataBuffer.readableByteCount();
-                        byte[] bytes = new byte[count];
-                        dataBuffer.read(bytes);
-
-                        final ByteBuffer buffer = ByteBuffer.allocate(count);
-                        buffer.put(bytes);
-                        buffer.flip();
-
-                        final int filePartNumber = atomicInteger.getAndAdd(count);
-                        LOGGER.info("processing file part {}", filePartNumber);
-                        fileChannel.write(buffer, filePartNumber, null, new CompletionHandler<Integer, ByteBuffer>() {
-                            @Override
-                            public void completed(Integer result, ByteBuffer attachment) {
-                                LOGGER.info("done saving file part {}", filePartNumber);
-                                buffer.clear();
-                            }
-
-                            @Override
-                            public void failed(Throwable exc, ByteBuffer attachment) {
-                                LOGGER.info("error saving file part {}", filePartNumber);
-                                throw new IllegalStateException(exc);
-                            }
-                        });
-                    }, cause -> { // onError
-                        LOGGER.info("done processing file parts with error");
-                        try {
-                            fileChannel.close();
-                        } catch (IOException ignored) {}
-                        processor.onError(cause);
-                    }, () -> { // onComplete
-                        LOGGER.info("done processing file parts");
-                        try {
-                            fileChannel.close();
-                        } catch (IOException ignored) {}
-                        processor.onComplete();
-                    });
-*/
         } catch (IOException e) {
             LOGGER.info("error opening the file channel");
             return Mono.error(e);
         }
-
-//        LOGGER.info("returning processor");
-//        return processor;
     }
-
-/*
-    private Mono<Void> saveFile(FilePart filePart) {
-        File dest = new File("/tmp/" + filePart.filename());
-        if (!dest.exists())
-            try {
-                dest.createNewFile();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        return filePart.transferTo(dest);
-    }
-*/
 }
