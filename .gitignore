@@ -1,5 +1,12 @@
 # Compiled class file
 *.class
+build
+out
+
+# IntelliJ
+*.ipr
+*.iws
+*.iml
 
 # Log file
 *.log
