@@ -23,12 +23,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @RestController
-@RequestMapping(path = "/api/files/upload/v1")
-public class Resource {
-    Logger LOGGER = LoggerFactory.getLogger(Resource.class);
+@RequestMapping(path = "/api/reactive-upload")
+public class ReactiveUploadResource {
+    Logger LOGGER = LoggerFactory.getLogger(ReactiveUploadResource.class);
 
     @RequestMapping(method = RequestMethod.POST, consumes = MediaType.MULTIPART_FORM_DATA_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
-    public Flux<String> upload(@RequestBody Flux<Part> parts) {
+    public Flux<String> uploadHandler(@RequestBody Flux<Part> parts) {
         return parts
                 .filter(part -> part instanceof FilePart)
                 .ofType(FilePart.class)
@@ -47,7 +47,6 @@ public class Resource {
         } catch (IOException e) {
             return Mono.error(e);
         }
-
 
         try {
             AsynchronousFileChannel fileChannel = AsynchronousFileChannel.open(file.toPath(), StandardOpenOption.WRITE);
