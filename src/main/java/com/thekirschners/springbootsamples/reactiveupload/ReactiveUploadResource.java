@@ -47,6 +47,7 @@ public class ReactiveUploadResource {
 
     /**
      * tske a {@link FilePart}, transfer it to disk using {@link AsynchronousFileChannel}s and return a {@link Mono} representing the result
+     *
      * @param filePart - the request part containing the file to be saved
      * @return a {@link Mono} representing the result of the operation
      */
@@ -66,7 +67,9 @@ public class ReactiveUploadResource {
 
         try {
             // create an async file channel to store the file on disk
-            AsynchronousFileChannel fileChannel = AsynchronousFileChannel.open(file.toPath(), StandardOpenOption.WRITE);
+            final AsynchronousFileChannel fileChannel = AsynchronousFileChannel.open(file.toPath(), StandardOpenOption.WRITE);
+
+            final CloseCondition closeCondition = new CloseCondition();
 
             // pointer to the end of file offset
             AtomicInteger fileWriteOffset = new AtomicInteger(0);
@@ -92,12 +95,21 @@ public class ReactiveUploadResource {
                     final int filePartOffset = fileWriteOffset.getAndAdd(count);
                     LOGGER.info("processing file part at offset {}", filePartOffset);
                     // write the buffer to disk
+                    closeCondition.onTaskSubmitted();
                     fileChannel.write(byteBuffer, filePartOffset, null, new CompletionHandler<Integer, ByteBuffer>() {
                         @Override
                         public void completed(Integer result, ByteBuffer attachment) {
                             // file part successfuly written to disk, clean up
                             LOGGER.info("done saving file part {}", filePartOffset);
                             byteBuffer.clear();
+
+                            if (closeCondition.onTaskCompleted())
+                                try {
+                                    LOGGER.info("closing after last part");
+                                    fileChannel.close();
+                                } catch (IOException ignored) {
+                                    ignored.printStackTrace();
+                                }
                         }
 
                         @Override
@@ -111,10 +123,12 @@ public class ReactiveUploadResource {
             }).doOnComplete(() -> {
                 // all done, close the file channel
                 LOGGER.info("done processing file parts");
-                try {
-                    fileChannel.close();
-                } catch (IOException ignored) {
-                }
+                if (closeCondition.canCloseOnComplete())
+                    try {
+                        LOGGER.info("closing after complete");
+                        fileChannel.close();
+                    } catch (IOException ignored) {
+                    }
 
             }).doOnError(t -> {
                 // ooops there was an error
